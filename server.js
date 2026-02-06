@@ -32,12 +32,14 @@ function parseCsv(data) {
     return [];
   }
   const header = lines[0].split(',').map((entry) => entry.trim());
+  const normalizedHeader = header.map((entry) => entry.toLowerCase().replace(/\s+/g, ''));
   const indexMap = {
-    ts_event: header.indexOf('ts_event'),
-    open: header.indexOf('open'),
-    high: header.indexOf('high'),
-    low: header.indexOf('low'),
-    close: header.indexOf('close')
+    date: normalizedHeader.indexOf('date'),
+    time: normalizedHeader.indexOf('time'),
+    open: normalizedHeader.indexOf('open'),
+    high: normalizedHeader.indexOf('high'),
+    low: normalizedHeader.indexOf('low'),
+    close: normalizedHeader.indexOf('close')
   };
   const missingColumns = Object.entries(indexMap)
     .filter(([, value]) => value === -1)
@@ -47,7 +49,9 @@ function parseCsv(data) {
   }
   return lines.slice(1).map((line) => {
     const parts = line.split(',');
-    const timestamp = parseTimestamp(parts[indexMap.ts_event]);
+    const date = parts[indexMap.date]?.trim() ?? '';
+    const time = parts[indexMap.time]?.trim() ?? '';
+    const timestamp = parseTimestamp(time ? `${date}T${time}` : date);
     return {
       timestamp,
       open: Number(parts[indexMap.open]),
@@ -86,43 +90,6 @@ function normalizeCandles(candles) {
     normalized.push(current);
   }
   return normalized;
-}
-
-function computeBodyBucket(candle) {
-  const range = candle.high - candle.low;
-  if (range <= 0) {
-    return '0-20';
-  }
-  const bodyPercent = Math.abs(candle.close - candle.open) / range * 100;
-  if (bodyPercent < 20) return '0-20';
-  if (bodyPercent < 40) return '20-40';
-  if (bodyPercent < 60) return '40-60';
-  if (bodyPercent < 80) return '60-80';
-  return '80-100';
-}
-
-function computeCloseBehavior(prev, current) {
-  if (!prev) {
-    return null;
-  }
-  const tookHigh = current.high > prev.high;
-  const tookLow = current.low < prev.low;
-  if (tookHigh && tookLow) {
-    return 'took_both_sides';
-  }
-  if (current.close > prev.high) {
-    return 'closed_above_prev_high';
-  }
-  if (tookHigh && current.close <= prev.high) {
-    return 'took_high_closed_below';
-  }
-  if (current.close < prev.low) {
-    return 'closed_below_prev_low';
-  }
-  if (tookLow && current.close >= prev.low) {
-    return 'took_low_closed_above';
-  }
-  return 'inside_prev_range';
 }
 
 function getBucketEnd(timestamp, minutes) {
@@ -172,12 +139,25 @@ function aggregateTimeframe(candles, minutes) {
 function enrichCandles(candles) {
   return candles.map((candle, index) => {
     const prev = index > 0 ? candles[index - 1] : null;
-    const direction = candle.close > candle.open ? 'bullish' : candle.close < candle.open ? 'bearish' : 'bearish';
+    const direction = candle.close > candle.open ? 'bullish' : 'bearish';
+    const tookHigh = prev ? candle.high > prev.high : null;
+    const tookLow = prev ? candle.low < prev.low : null;
+    const tookBothSides = prev ? tookHigh && tookLow : null;
+    const tookNeitherSide = prev ? !tookHigh && !tookLow : null;
+    const closedAbovePrevHigh = prev ? candle.close > prev.high : null;
+    const closedBelowPrevLow = prev ? candle.close < prev.low : null;
+    const tookHighClosedBelow = prev ? tookHigh && candle.close <= prev.high : null;
+    const tookLowClosedAbove = prev ? tookLow && candle.close >= prev.low : null;
+
     return {
       ...candle,
       direction,
-      body_bucket: computeBodyBucket(candle),
-      close_behavior: computeCloseBehavior(prev, candle)
+      closed_above_prev_high: closedAbovePrevHigh,
+      closed_below_prev_low: closedBelowPrevLow,
+      took_high_closed_below: tookHighClosedBelow,
+      took_low_closed_above: tookLowClosedAbove,
+      took_both_sides: tookBothSides,
+      took_neither_side: tookNeitherSide
     };
   });
 }
@@ -212,10 +192,26 @@ function matchSequence(candle, criteria) {
   if (criteria.direction && candle.direction !== criteria.direction) {
     return false;
   }
-  if (criteria.body_bucket && candle.body_bucket !== criteria.body_bucket) {
+  if (criteria.close_position) {
+    if (criteria.close_position === 'above_prev_high' && !candle.closed_above_prev_high) {
+      return false;
+    }
+    if (criteria.close_position === 'below_prev_low' && !candle.closed_below_prev_low) {
+      return false;
+    }
+  }
+  if (criteria.sweep_close) {
+    if (criteria.sweep_close === 'took_high_closed_below' && !candle.took_high_closed_below) {
+      return false;
+    }
+    if (criteria.sweep_close === 'took_low_closed_above' && !candle.took_low_closed_above) {
+      return false;
+    }
+  }
+  if (typeof criteria.took_both_sides === 'boolean' && candle.took_both_sides !== criteria.took_both_sides) {
     return false;
   }
-  if (criteria.close_behavior && candle.close_behavior !== criteria.close_behavior) {
+  if (typeof criteria.took_neither_side === 'boolean' && candle.took_neither_side !== criteria.took_neither_side) {
     return false;
   }
   return true;
@@ -224,21 +220,14 @@ function matchSequence(candle, criteria) {
 function analyzeSequence(candles, sequence) {
   let sampleSize = 0;
   const directionCounts = { bullish: 0, bearish: 0 };
-  const priceActionCounts = {
-    closed_above_c2_high: 0,
-    closed_above_c1_high: 0,
-    closed_below_c2_low: 0,
-    closed_below_c1_low: 0,
-    took_high_closed_below: 0,
-    took_low_closed_above: 0,
-    took_both_sides: 0
-  };
-  const bodyBucketCounts = {
-    '0-20': 0,
-    '20-40': 0,
-    '40-60': 0,
-    '60-80': 0,
-    '80-100': 0
+  const probabilityCounts = {
+    close_above_c2_high: 0,
+    close_below_c2_low: 0,
+    take_c2_high: 0,
+    take_c2_low: 0,
+    take_c1_high: 0,
+    take_c1_low: 0,
+    close_inside_c2: 0
   };
 
   for (let i = 0; i <= candles.length - sequence.length - 1; i += 1) {
@@ -257,28 +246,27 @@ function analyzeSequence(candles, sequence) {
     const c1 = sequence.length >= 2 ? candles[i + sequence.length - 2] : c2;
     sampleSize += 1;
     directionCounts[next.direction] += 1;
-    bodyBucketCounts[next.body_bucket] += 1;
 
     if (next.close > c2.high) {
-      priceActionCounts.closed_above_c2_high += 1;
-    }
-    if (next.close > c1.high) {
-      priceActionCounts.closed_above_c1_high += 1;
+      probabilityCounts.close_above_c2_high += 1;
     }
     if (next.close < c2.low) {
-      priceActionCounts.closed_below_c2_low += 1;
+      probabilityCounts.close_below_c2_low += 1;
     }
-    if (next.close < c1.low) {
-      priceActionCounts.closed_below_c1_low += 1;
+    if (next.high > c2.high) {
+      probabilityCounts.take_c2_high += 1;
     }
-    if (next.high > c2.high && next.close <= c2.high) {
-      priceActionCounts.took_high_closed_below += 1;
+    if (next.low < c2.low) {
+      probabilityCounts.take_c2_low += 1;
     }
-    if (next.low < c2.low && next.close >= c2.low) {
-      priceActionCounts.took_low_closed_above += 1;
+    if (next.high > c1.high) {
+      probabilityCounts.take_c1_high += 1;
     }
-    if (next.high > c2.high && next.low < c2.low) {
-      priceActionCounts.took_both_sides += 1;
+    if (next.low < c1.low) {
+      probabilityCounts.take_c1_low += 1;
+    }
+    if (next.close >= c2.low && next.close <= c2.high) {
+      probabilityCounts.close_inside_c2 += 1;
     }
   }
 
@@ -290,11 +278,8 @@ function analyzeSequence(candles, sequence) {
       bullish: toPercent(directionCounts.bullish),
       bearish: toPercent(directionCounts.bearish)
     },
-    price_action_probabilities: Object.fromEntries(
-      Object.entries(priceActionCounts).map(([key, value]) => [key, toPercent(value)])
-    ),
-    body_bucket_distribution: Object.fromEntries(
-      Object.entries(bodyBucketCounts).map(([key, value]) => [key, toPercent(value)])
+    next_candle_probabilities: Object.fromEntries(
+      Object.entries(probabilityCounts).map(([key, value]) => [key, toPercent(value)])
     )
   };
 }
@@ -309,8 +294,8 @@ app.post('/api/analyze', (req, res) => {
     res.status(400).json({ error: 'Invalid timeframe.' });
     return;
   }
-  if (!Array.isArray(sequence) || sequence.length === 0) {
-    res.status(400).json({ error: 'Sequence is required.' });
+  if (!Array.isArray(sequence) || sequence.length < 2 || sequence.length > 5) {
+    res.status(400).json({ error: 'Sequence must have between 2 and 5 candles.' });
     return;
   }
   const result = analyzeSequence(timeframeData[timeframe], sequence);

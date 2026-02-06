@@ -9,15 +9,15 @@
   <body>
     <main class="container">
       <header>
-        <h1>Candlestick Sequence Probability Dashboard</h1>
+        <h1><strong>Probability Checker</strong></h1>
         <p class="subtitle">
           Research-only tool for analyzing candlestick sequence probabilities. Not a trading system,
           charting platform, or signal generator.
         </p>
       </header>
 
-      <section class="panel" id="status-panel">
-        <h2>Status</h2>
+      <section class="panel" id="sequence-panel">
+        <h2>Add Candles &amp; Conditions</h2>
         <div class="status-grid">
           <div>
             <span class="label">Data file</span>
@@ -32,10 +32,6 @@
             <span id="status-range">-</span>
           </div>
         </div>
-      </section>
-
-      <section class="panel" id="controls-panel">
-        <h2>Global Controls</h2>
         <div class="controls">
           <label>
             Timeframe
@@ -52,10 +48,6 @@
           </label>
           <button id="run-analysis">Run Analysis</button>
         </div>
-      </section>
-
-      <section class="panel" id="sequence-panel">
-        <h2>Candle Sequence Builder</h2>
         <div id="sequence-list" class="sequence-list"></div>
         <div class="sequence-actions">
           <button id="add-candle">Add candle</button>
@@ -64,25 +56,22 @@
       </section>
 
       <section class="panel" id="results-panel">
-        <h2>Results</h2>
+        <h2>Next Candle Probability</h2>
         <div class="results-grid">
           <div>
-            <h3>Sample Size</h3>
-            <p id="sample-size">Sample size: -</p>
-          </div>
-          <div>
-            <h3>Next Candle Direction</h3>
+            <h3>Direction</h3>
             <ul id="direction-results"></ul>
           </div>
           <div>
-            <h3>Next Candle Price Behavior</h3>
+            <h3>Price Behavior</h3>
             <ul id="price-action-results"></ul>
           </div>
-          <div>
-            <h3>Next Candle Body % Distribution</h3>
-            <ul id="body-results"></ul>
-          </div>
         </div>
+      </section>
+
+      <section class="panel" id="occurrence-panel">
+        <h2>Occurrence of the Formation</h2>
+        <p id="sample-size">Sample size: -</p>
       </section>
     </main>
 
@@ -92,40 +81,69 @@
           <h3 class="candle-title">Candle</h3>
         </div>
         <label>
-          Direction
-          <select class="direction-select">
-            <option value="bullish">Bullish</option>
-            <option value="bearish">Bearish</option>
-          </select>
-        </label>
-        <label class="checkbox-row">
-          <input type="checkbox" class="body-toggle" />
-          Include body % bucket
-        </label>
-        <label>
-          Body % bucket
-          <select class="body-select" disabled>
-            <option value="0-20">0–20%</option>
-            <option value="20-40">20–40%</option>
-            <option value="40-60">40–60%</option>
-            <option value="60-80">60–80%</option>
-            <option value="80-100">80–100%</option>
-          </select>
-        </label>
-        <label class="checkbox-row">
-          <input type="checkbox" class="close-toggle" />
-          Include close behavior
+          <span class="field-title">Condition 1: Close direction</span>
+          <div class="inline-field">
+            <label class="checkbox-row">
+              <input type="checkbox" class="direction-toggle" />
+              Use
+            </label>
+            <select class="direction-select" disabled>
+              <option value="bullish">Bullish</option>
+              <option value="bearish">Bearish</option>
+            </select>
+          </div>
         </label>
         <label>
-          Close behavior
-          <select class="close-select" disabled>
-            <option value="closed_above_prev_high">Closed above previous high</option>
-            <option value="took_high_closed_below">Took previous high but closed below</option>
-            <option value="closed_below_prev_low">Closed below previous low</option>
-            <option value="took_low_closed_above">Took previous low but closed above</option>
-            <option value="took_both_sides">Took both previous high and low</option>
-            <option value="inside_prev_range">Took neither side and closed inside</option>
-          </select>
+          <span class="field-title">Condition 2: Close above/below previous candle</span>
+          <div class="inline-field">
+            <label class="checkbox-row">
+              <input type="checkbox" class="close-position-toggle" />
+              Use
+            </label>
+            <select class="close-position-select" disabled>
+              <option value="above_prev_high">Closed above previous high</option>
+              <option value="below_prev_low">Closed below previous low</option>
+            </select>
+          </div>
+        </label>
+        <label>
+          <span class="field-title">Condition 3: Took previous high/low &amp; closed back</span>
+          <div class="inline-field">
+            <label class="checkbox-row">
+              <input type="checkbox" class="sweep-toggle" />
+              Use
+            </label>
+            <select class="sweep-select" disabled>
+              <option value="took_high_closed_below">Took previous high, closed below it</option>
+              <option value="took_low_closed_above">Took previous low, closed above it</option>
+            </select>
+          </div>
+        </label>
+        <label>
+          <span class="field-title">Condition 4: Took both high &amp; low of previous candle</span>
+          <div class="inline-field">
+            <label class="checkbox-row">
+              <input type="checkbox" class="both-toggle" />
+              Use
+            </label>
+            <select class="both-select" disabled>
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+        </label>
+        <label>
+          <span class="field-title">Condition 5: Took neither high nor low</span>
+          <div class="inline-field">
+            <label class="checkbox-row">
+              <input type="checkbox" class="neither-toggle" />
+              Use
+            </label>
+            <select class="neither-select" disabled>
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          </div>
         </label>
       </div>
     </template>

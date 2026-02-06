@@ -9,25 +9,16 @@ const timeframeSelect = document.getElementById('timeframe-select');
 const sampleSizeEl = document.getElementById('sample-size');
 const directionResults = document.getElementById('direction-results');
 const priceActionResults = document.getElementById('price-action-results');
-const bodyResults = document.getElementById('body-results');
 const candleTemplate = document.getElementById('candle-template');
 
-const bodyBucketLabels = {
-  '0-20': '0–20%',
-  '20-40': '20–40%',
-  '40-60': '40–60%',
-  '60-80': '60–80%',
-  '80-100': '80–100%'
-};
-
 const priceActionLabels = {
-  closed_above_c2_high: 'Closed above C2 high',
-  closed_above_c1_high: 'Closed above C1 high',
-  closed_below_c2_low: 'Closed below C2 low',
-  closed_below_c1_low: 'Closed below C1 low',
-  took_high_closed_below: 'Took high but closed below',
-  took_low_closed_above: 'Took low but closed above',
-  took_both_sides: 'Took both sides'
+  close_above_c2_high: 'Closed above C2 high',
+  close_below_c2_low: 'Closed below C2 low',
+  take_c2_high: 'Took C2 high',
+  take_c2_low: 'Took C2 low',
+  take_c1_high: 'Took C1 high',
+  take_c1_low: 'Took C1 low',
+  close_inside_c2: 'Closed inside C2'
 };
 
 function updateResultsList(target, data, labels = {}) {
@@ -46,28 +37,48 @@ function updateCandleTitles() {
     const title = card.querySelector('.candle-title');
     title.textContent = `Candle ${index + 1}`;
   });
-  removeButton.disabled = cards.length <= 1;
+  removeButton.disabled = cards.length <= 2;
+  addButton.disabled = cards.length >= 5;
 }
 
 function createCandleCard() {
   const fragment = candleTemplate.content.cloneNode(true);
   const card = fragment.querySelector('.candle-card');
-  const bodyToggle = fragment.querySelector('.body-toggle');
-  const bodySelect = fragment.querySelector('.body-select');
-  const closeToggle = fragment.querySelector('.close-toggle');
-  const closeSelect = fragment.querySelector('.close-select');
+  const directionToggle = fragment.querySelector('.direction-toggle');
+  const directionSelect = fragment.querySelector('.direction-select');
+  const closePositionToggle = fragment.querySelector('.close-position-toggle');
+  const closePositionSelect = fragment.querySelector('.close-position-select');
+  const sweepToggle = fragment.querySelector('.sweep-toggle');
+  const sweepSelect = fragment.querySelector('.sweep-select');
+  const bothToggle = fragment.querySelector('.both-toggle');
+  const bothSelect = fragment.querySelector('.both-select');
+  const neitherToggle = fragment.querySelector('.neither-toggle');
+  const neitherSelect = fragment.querySelector('.neither-select');
 
-  bodyToggle.addEventListener('change', () => {
-    bodySelect.disabled = !bodyToggle.checked;
+  directionToggle.addEventListener('change', () => {
+    directionSelect.disabled = !directionToggle.checked;
   });
-  closeToggle.addEventListener('change', () => {
-    closeSelect.disabled = !closeToggle.checked;
+  closePositionToggle.addEventListener('change', () => {
+    closePositionSelect.disabled = !closePositionToggle.checked;
+  });
+  sweepToggle.addEventListener('change', () => {
+    sweepSelect.disabled = !sweepToggle.checked;
+  });
+  bothToggle.addEventListener('change', () => {
+    bothSelect.disabled = !bothToggle.checked;
+  });
+  neitherToggle.addEventListener('change', () => {
+    neitherSelect.disabled = !neitherToggle.checked;
   });
 
   return card;
 }
 
 function addCandle() {
+  const cards = sequenceList.querySelectorAll('.candle-card');
+  if (cards.length >= 5) {
+    return;
+  }
   const card = createCandleCard();
   sequenceList.appendChild(card);
   updateCandleTitles();
@@ -75,7 +86,7 @@ function addCandle() {
 
 function removeCandle() {
   const cards = sequenceList.querySelectorAll('.candle-card');
-  if (cards.length > 1) {
+  if (cards.length > 2) {
     cards[cards.length - 1].remove();
     updateCandleTitles();
   }
@@ -83,17 +94,34 @@ function removeCandle() {
 
 function buildSequencePayload() {
   const cards = sequenceList.querySelectorAll('.candle-card');
-  return Array.from(cards).map((card) => {
-    const direction = card.querySelector('.direction-select').value;
-    const bodyToggle = card.querySelector('.body-toggle').checked;
-    const closeToggle = card.querySelector('.close-toggle').checked;
-    const payload = { direction };
-    if (bodyToggle) {
-      payload.body_bucket = card.querySelector('.body-select').value;
+  return Array.from(cards).map((card, index) => {
+    const payload = {};
+    const directionToggle = card.querySelector('.direction-toggle').checked;
+    const closePositionToggle = card.querySelector('.close-position-toggle').checked;
+    const sweepToggle = card.querySelector('.sweep-toggle').checked;
+    const bothToggle = card.querySelector('.both-toggle').checked;
+    const neitherToggle = card.querySelector('.neither-toggle').checked;
+
+    if (directionToggle) {
+      payload.direction = card.querySelector('.direction-select').value;
     }
-    if (closeToggle) {
-      payload.close_behavior = card.querySelector('.close-select').value;
+    if (closePositionToggle) {
+      payload.close_position = card.querySelector('.close-position-select').value;
     }
+    if (sweepToggle) {
+      payload.sweep_close = card.querySelector('.sweep-select').value;
+    }
+    if (bothToggle) {
+      payload.took_both_sides = card.querySelector('.both-select').value === 'true';
+    }
+    if (neitherToggle) {
+      payload.took_neither_side = card.querySelector('.neither-select').value === 'true';
+    }
+
+    if (Object.keys(payload).length === 0) {
+      throw new Error(`Please select at least one condition for Candle ${index + 1}.`);
+    }
+
     return payload;
   });
 }
@@ -109,9 +137,16 @@ async function loadStatus() {
 async function runAnalysis() {
   runButton.disabled = true;
   try {
+    let sequence;
+    try {
+      sequence = buildSequencePayload();
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
     const payload = {
       timeframe: timeframeSelect.value,
-      sequence: buildSequencePayload()
+      sequence
     };
     const response = await fetch('/api/analyze', {
       method: 'POST',
@@ -129,8 +164,7 @@ async function runAnalysis() {
       bullish: 'Bullish',
       bearish: 'Bearish'
     });
-    updateResultsList(priceActionResults, result.price_action_probabilities, priceActionLabels);
-    updateResultsList(bodyResults, result.body_bucket_distribution, bodyBucketLabels);
+    updateResultsList(priceActionResults, result.next_candle_probabilities, priceActionLabels);
   } catch (error) {
     alert('Failed to run analysis.');
   } finally {
@@ -142,5 +176,6 @@ addButton.addEventListener('click', addCandle);
 removeButton.addEventListener('click', removeCandle);
 runButton.addEventListener('click', runAnalysis);
 
+addCandle();
 addCandle();
 loadStatus();
