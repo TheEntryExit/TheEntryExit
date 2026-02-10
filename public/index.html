@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Candle Pattern Probability Analyzer</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="top-bar panel">
+        <div>
+          <h1>Candle Pattern Probability Analyzer</h1>
+          <p class="muted">Build candle conditions and analyze NEXT candle behavior vs ANCHOR.</p>
+        </div>
+        <div class="status" id="statusText">Loading candles...</div>
+      </header>
+
+      <main class="grid">
+        <section class="panel">
+          <h2>Candle Sequence Builder</h2>
+          <p class="muted">Configure C1 to C4 (minimum 1 candle, maximum 4 candles).</p>
+          <div id="sequenceContainer" class="sequence-container"></div>
+          <div class="btn-row">
+            <button id="addCandleBtn" type="button">Add Candle</button>
+            <button id="removeCandleBtn" type="button">Remove Candle</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Sequence Visual</h2>
+          <p class="muted">Last configured candle is ANCHOR. NEXT candle reflects strongest probability bias.</p>
+          <div id="visualCandles" class="visual-candles"></div>
+        </section>
+
+        <section class="panel">
+          <div class="results-head">
+            <h2>Results Panel</h2>
+            <button id="runAnalysisBtn" class="run-btn" type="button">Run Analysis</button>
+          </div>
+
+          <div class="sample-box">
+            <span>Sample size</span>
+            <strong id="sampleValue">-</strong>
+          </div>
+
+          <div id="probabilityGrid" class="probability-grid"></div>
+          <p id="errorText" class="error"></p>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
